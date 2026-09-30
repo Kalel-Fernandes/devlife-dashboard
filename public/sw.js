@@ -53,3 +53,31 @@ self.addEventListener("fetch", (event) => {
         })
     );
 });
+
+// SYNC: disparado pelo NAVEGADOR (não pelo nosso JS) assim que a conexão
+// volta, para qualquer tag registrada via registro.sync.register(tag).
+self.addEventListener("sync", (event) => {
+    if (event.tag !== "sincronizar-tarefas") return;
+    event.waitUntil(
+        self.clients.matchAll().then((clientes) => {
+            clientes.forEach((cliente) =>
+                cliente.postMessage({ tipo: "SINCRONIZADO", em: new Date().toISOString() })
+            );
+        })
+    );
+});
+    // PUSH: disparado quando um SERVIDOR envia uma mensagem push de verdade.
+    // Não conseguimos disparar este evento sem um backend real, mas ele fica
+    // pronto e documentado para quando você conectar um.
+self.addEventListener("push", (event) => {
+    const dados = event.data
+        ? event.data.json()
+        : { titulo: "DevLife Dashboard", corpo: "Você tem uma novidade." };
+    event.waitUntil(
+        self.registration.showNotification(dados.titulo, {
+            body: dados.corpo,
+            icon: "/icons/icon-192.png",
+            badge: "/icons/icon-192.png",
+        })
+    );
+});

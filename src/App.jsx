@@ -8,6 +8,9 @@ import TaskCard from "./components/TaskCard";
 import TaskForm from "./components/TaskForm";
 import StatusRede from "./components/StatusRede";
 import InstallPrompt from "./components/InstallPrompt";
+import NotificationPrompt from "./components/NotificationPrompt";
+import { notificarLocal } from "./notifications";
+import { agendarSincronizacao } from "./backgroundSync";
 
 const TAREFAS_INICIAIS = [
   { id: 1, titulo: "Estudar componentes do React", categoria: "Estudos", prioridade: "alta", concluida: false },
@@ -29,10 +32,17 @@ function App() {
 
   // EFEITO COLATERAL: sincronizar o estado com o localStorage.
   // Roda toda vez que `tarefas` muda (é a dependência do array).
-  useEffect(() => {
-    console.log("💾 Salvando tarefas no localStorage...");
-    localStorage.setItem("devlife-tarefas", JSON.stringify(tarefas));
-  }, [tarefas]);
+  // useEffect(() => {
+  //   console.log("💾 Salvando tarefas no localStorage...");
+  //   localStorage.setItem("devlife-tarefas", JSON.stringify(tarefas));
+  // }, [tarefas]);
+
+  function avisarMudancaOffline() {
+      if (!navigator.onLine) {
+        agendarSincronizacao("sincronizar-tarefas");
+        setAnuncio((atual) => `${atual} A sincronização ocorrerá quando a conexão voltar.`);
+      }
+  }
 
   function adicionarTarefa(novaTarefa) {
     // Nunca alteramos o array diretamente (tarefas.push(...) ❌)
@@ -43,6 +53,7 @@ function App() {
     ]);
 
     setAnuncio(`Tarefa "${novaTarefa.titulo}" adicionada.`)
+    avisarMudancaOffline();
   }
 
   function alternarConcluida(id) {
@@ -52,13 +63,20 @@ function App() {
     setTarefas((atual) =>
       atual.map((t) => (t.id === id ? { ...t, concluida: !t.concluida } : t))
     );
-    setAnuncio(`Tarefa "${tarefa.titulo}" marcada como ${status}.`)
+    setAnuncio(`Tarefa "${tarefa.titulo}" marcada como ${status}.`);
+    // Gatilho real: tarefa importante concluída.
+    if (vaiConcluir && tarefa.prioridade === "alta") {
+      notificarLocal("Boa! Tarefa de alta prioridade concluída 🎉", {
+        body: tarefa.titulo,
+      });
+    }
   }
 
   function removerTarefa(id) {
     const tarefa = tarefas.find((t) => t.id === id);
     setTarefas((atual) => atual.filter((t) => t.id !== id));
     setAnuncio(`Tarefa "${tarefa.titulo}" removida.`)
+    avisarMudancaOffline();
   }
 
   const tarefasFiltradas = tarefas.filter((t) => {
@@ -66,6 +84,17 @@ function App() {
     if (filtro === "concluidas") return t.concluida;
     return true; // "todas"
   });
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    function aoReceberMensagem(evento) {
+      if (evento.data?.tipo === "SINCRONIZADO") {
+        setAnuncio("🔄 Sincronização em segundo plano concluída.");
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", aoReceberMensagem);
+    return () => navigator.serviceWorker.removeEventListener("message", aoReceberMensagem);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -78,6 +107,7 @@ function App() {
       <Header />
       <StatusRede />
       <InstallPrompt />
+      <NotificationPrompt />
 
       <div aria-live="polite" role="status" className="sr-only">
         {anuncio}
